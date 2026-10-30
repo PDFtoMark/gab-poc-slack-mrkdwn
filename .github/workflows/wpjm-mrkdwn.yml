@@ -1,0 +1,37 @@
+name: wpjm-gardening-mrkdwn
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: attacker-controlled GitHub issue title
+        required: true
+permissions: {}
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the Slack block exactly as action-repo-gardening@trunk does
+        env:
+          TITLE: ${{ inputs.title }}
+          URL: https://github.com/Automattic/WP-Job-Manager/issues/9999
+        run: |
+          python3 - <<'PY'
+          import json, os
+          url = os.environ['URL']
+          title = os.environ['TITLE']
+          mrkdwn = f"<{url}|{title}>"
+          payload = {
+              "channel": "C_QUALITY_CHANNEL",
+              "blocks": [
+                  {"type": "section", "text": {"type": "mrkdwn", "text": "This issue has been labeled as a Customer Report. Please complete first-line triage within 24 hours."}},
+                  {"type": "divider"},
+                  {"type": "section", "text": {"type": "mrkdwn", "text": mrkdwn}},
+              ],
+              "text": f"This issue has been labeled as a Customer Report. Please complete first-line triage within 24 hours. -- <{url}|{title}>",
+              "mrkdwn": True,
+              "unfurl_links": False,
+              "unfurl_media": False,
+          }
+          print("RENDERED_MRKDWN=" + mrkdwn)
+          print("SLACK_PAYLOAD=" + json.dumps(payload))
+          PY
